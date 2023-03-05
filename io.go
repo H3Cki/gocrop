@@ -1,6 +1,8 @@
-package crop
+package gocrop
 
 import (
+	"errors"
+	"fmt"
 	"image"
 	"image/gif"
 	"image/png"
@@ -12,12 +14,16 @@ import (
 	"golang.org/x/image/tiff"
 )
 
-type imgCoder struct {
+var ErrUnsupportedFormat = errors.New("unsupported format")
+var ErrImageUncroppable = errors.New("image does not support cropping")
+var ErrImageLoadFailed = errors.New("unable to load image")
+
+type imageCoder struct {
 	decode func(r io.Reader) (image.Image, error)
 	encode func(w io.Writer, m image.Image) error
 }
 
-var imgCoders = map[string]imgCoder{
+var imageCoders = map[string]imageCoder{
 	"png": {
 		decode: png.Decode,
 		encode: png.Encode,
@@ -36,23 +42,41 @@ var imgCoders = map[string]imgCoder{
 	},
 }
 
-func loadImage(fp string, coder imgCoder) (image.Image, error) {
-	file, err := os.Open(fp)
+func LoadCroppable(path string) (*Croppable, error) {
+	file, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
 
 	defer file.Close()
 
-	img, err := coder.decode(file)
-	if err != nil {
-		return nil, err
+	dir, name, ext := dirFileExt(path)
+
+	coder, ok := imageCoders[ext]
+	if !ok {
+		return nil, ErrUnsupportedFormat
 	}
 
-	return img, nil
+	img, err := coder.decode(file)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", err.Error(), ErrImageLoadFailed)
+	}
+
+	simg, ok := img.(croppableImg)
+	if !ok {
+		return nil, ErrImageUncroppable
+	}
+
+	return &Croppable{
+		Dir:     dir,
+		Name:    name,
+		Format:  ext,
+		Cropper: simg,
+		Encode:  coder.encode,
+	}, nil
 }
 
-func saveImage(fp string, img image.Image, coder imgCoder) error {
+func saveImage(fp string, img image.Image, encode func(w io.Writer, m image.Image) error) error {
 	fd, err := os.Create(fp)
 	if err != nil {
 		return err
@@ -60,7 +84,7 @@ func saveImage(fp string, img image.Image, coder imgCoder) error {
 
 	defer fd.Close()
 
-	return coder.encode(fd, img)
+	return encode(fd, img)
 }
 
 func dirFileExt(fp string) (dir, name, ext string) {

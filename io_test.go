@@ -1,10 +1,29 @@
-package crop
+package gocrop
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
+
+func TestLoadCroppable(t *testing.T) {
+	tests := []struct {
+		path        string
+		expectedErr error
+	}{
+		{"testdata/t.png", nil},
+		{"testdata/e.png", nil},
+		{"testdata/testdir1/testimg1.png", ErrImageLoadFailed},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			cpb, err := LoadCroppable(tt.path)
+			assert.ErrorIs(t, tt.expectedErr, err)
+			assert.True(t, (cpb != nil) == (tt.expectedErr == nil))
+		})
+	}
+}
 
 func TestDirNameExt(t *testing.T) {
 	tests := []struct {
