@@ -62,16 +62,16 @@ func (d *DirectoryLoader) LoadCroppablesIter(dirs []string) (*CroppableLoadItera
 	errs := []error{}
 
 	for _, dir := range dirs {
-		path, err := loader(dir)
+		p, err := loader(dir)
 		if err != nil {
 			errs = append(errs, err)
 			continue
 		}
 
-		paths = append(paths, path...)
+		paths = append(paths, p...)
 	}
 
-	return newCroppableLoadIterator(paths), errors.Join(errs...)
+	return NewCroppableLoadIterator(paths), errors.Join(errs...)
 }
 
 func (d *DirectoryLoader) LoadCroppables(dirs []string) ([]*Croppable, error) {
@@ -153,13 +153,13 @@ func (i *DirectoryLoader) loadDir(dir string) ([]string, error) {
 }
 
 type CroppableLoadIterator struct {
-	paths   []string
+	Paths   []string
 	current int
 }
 
-func newCroppableLoadIterator(paths []string) *CroppableLoadIterator {
+func NewCroppableLoadIterator(paths []string) *CroppableLoadIterator {
 	return &CroppableLoadIterator{
-		paths: paths,
+		Paths: paths,
 	}
 }
 
@@ -167,9 +167,9 @@ func (i *CroppableLoadIterator) Reset() {
 	i.current = 0
 }
 
-func (i *CroppableLoadIterator) Current() (*Croppable, error) {
-	path := i.paths[i.current]
-	return LoadCroppable(path)
+func (i *CroppableLoadIterator) Load() (*Croppable, error) {
+	p := i.Paths[i.current]
+	return LoadCroppable(p)
 }
 
 func (i *CroppableLoadIterator) Next() {
@@ -177,5 +177,5 @@ func (i *CroppableLoadIterator) Next() {
 }
 
 func (i *CroppableLoadIterator) Valid() bool {
-	return i.current < len(i.paths)
+	return i.current < len(i.Paths)
 }

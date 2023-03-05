@@ -6,6 +6,7 @@ import (
 	"gocrop"
 	"log"
 	"os"
+	"sync"
 
 	"github.com/urfave/cli/v2"
 )
@@ -21,7 +22,7 @@ var imageFlags = []cli.Flag{
 		Usage: "Sets the number of transparent pixels that will surround the min cropped rectangle",
 	},
 	&cli.StringFlag{
-		Name:  "out",
+		Name:  "out_dir",
 		Usage: "Sets the output directory for cropped images.",
 		Value: "",
 		Action: func(ctx *cli.Context, s string) error {
@@ -98,19 +99,31 @@ func main() {
 						return err
 					}
 
-					croppables := []*gocrop.Croppable{}
+					iter := gocrop.NewCroppableLoadIterator(cCtx.Args().Slice())
 
-					for _, arg := range cCtx.Args().Slice() {
-						croppable, err := gocrop.LoadCroppable(arg)
+					wg := &sync.WaitGroup{}
+
+					for iter.Reset(); iter.Valid(); iter.Next() {
+						croppable, err := iter.Load()
 						if err != nil {
-							fmt.Println(err)
+							fmt.Println("error loading image: ", err.Error())
 							continue
 						}
 
-						croppables = append(croppables, croppable)
+						wg.Add(1)
+
+						go func() {
+							defer wg.Done()
+
+							if err := cropper.CropAndSave(croppable); err != nil {
+								fmt.Println("error loading cropsaving image: ", err.Error())
+							}
+						}()
 					}
 
-					return cropper.CropAndSave(croppables)
+					wg.Wait()
+
+					return nil
 				},
 				Flags: imageFlags,
 			},
@@ -147,12 +160,34 @@ func main() {
 						return err
 					}
 
-					croppables, err := loader.LoadCroppablesIter(cCtx.Args().Slice())
+					iter, err := loader.LoadCroppablesIter(cCtx.Args().Slice())
 					if err != nil {
 						return err
 					}
 
-					return cropper.CropIter(croppables)
+					wg := &sync.WaitGroup{}
+
+					for iter.Reset(); iter.Valid(); iter.Next() {
+						croppable, err := iter.Load()
+						if err != nil {
+							fmt.Println("error loading image: ", err.Error())
+							continue
+						}
+
+						wg.Add(1)
+
+						go func() {
+							defer wg.Done()
+
+							if err := cropper.CropAndSave(croppable); err != nil {
+								fmt.Println("error loading cropsaving image: ", err.Error())
+							}
+						}()
+					}
+
+					wg.Wait()
+
+					return nil
 				},
 				Flags: append(imageFlags, directoryFlags...),
 			},

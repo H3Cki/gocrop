@@ -11,11 +11,12 @@ import (
 )
 
 type Cropper struct {
-	threshold uint32
-	outPrefix string
-	outSuffix string
-	outDir    string
-	padding   int
+	threshold     uint32
+	outPrefix     string
+	outSuffix     string
+	outDir        string
+	skipUnchanged bool
+	padding       int
 }
 
 func NewCropper(options ...CropperOption) (*Cropper, error) {
@@ -30,89 +31,39 @@ func NewCropper(options ...CropperOption) (*Cropper, error) {
 	return c, nil
 }
 
-func (i *Cropper) CropAndSave(croppables []*Croppable) error {
+// Crop takes a *Croppable and crops it. If cropped result differs from *Croppable source image
+// cropped image is returned as non-nil image.Image with a true bool flag. If cropped result
+// is the same as *Croppable source image function returns (nil, false)
+func (i *Cropper) Crop(croppable *Croppable) (image.Image, bool) {
+	cropped, ok := i.crop(croppable)
+
+	return cropped, ok
+}
+
+// CropAndSave takes a *Croppable, calls *Cropper.Crop(*Croppable) and attempts to save the cropped result.
+// If cropped result is the same as *Croppable source image and WithSkipUnchanged option was set to true,
+// image will not be saved.
+func (i *Cropper) CropAndSave(croppable *Croppable) error {
 	if i.outDir != "" {
 		if err := os.MkdirAll(i.outDir, os.ModePerm); err != nil {
 			return err
 		}
 	}
 
-	wg := &sync.WaitGroup{}
-	wg.Add(len(croppables))
-
-	for _, croppable := range croppables {
-		go func(c *Croppable) {
-			defer wg.Done()
-			cropped, ok := i.crop(c)
-			if !ok {
-				return
-			}
-
-			err := i.save(c, cropped)
-			if err != nil {
-				fmt.Println(err)
-			}
-		}(croppable)
+	cropped, ok := i.crop(croppable)
+	if !ok && i.skipUnchanged {
+		return nil
 	}
 
-	wg.Wait()
-
-	return nil
-}
-
-func (i *Cropper) Crop(croppables []*Croppable) ([]image.Image, error) {
-	if i.outDir != "" {
-		if err := os.MkdirAll(i.outDir, os.ModePerm); err != nil {
-			return []image.Image{}, err
-		}
+	if err := i.save(croppable, cropped); err != nil {
+		return err
 	}
-
-	crops := []image.Image{}
-
-	for _, croppable := range croppables {
-		cropped, _ := i.crop(croppable)
-		crops = append(crops, cropped)
-	}
-
-	return crops, nil
-}
-
-type CroppableIterator interface {
-	Reset()
-	Next()
-	Current() (*Croppable, error)
-	Valid() bool
-}
-
-func (i *Cropper) CropIter(iter CroppableIterator) error {
-	if i.outDir != "" {
-		if err := os.MkdirAll(i.outDir, os.ModePerm); err != nil {
-			return err
-		}
-	}
-
-	wg := &sync.WaitGroup{}
-
-	for iter.Reset(); iter.Valid(); iter.Next() {
-		croppable, err := iter.Current()
-		if err != nil {
-			fmt.Println(err)
-			continue
-		}
-
-		wg.Add(1)
-		go func() {
-			i.crop(croppable)
-		}()
-	}
-
-	wg.Wait()
 
 	return nil
 }
 
 func (i *Cropper) crop(c *Croppable) (image.Image, bool) {
-	rect := i.cropperRect(c.Cropper)
+	rect := i.Rect(c.Cropper)
 
 	var cropped image.Image
 
@@ -122,7 +73,6 @@ func (i *Cropper) crop(c *Croppable) (image.Image, bool) {
 		rect.Min.Y >= i.padding &&
 		c.Cropper.Bounds().Dx()-rect.Max.X >= i.padding &&
 		c.Cropper.Bounds().Dy()-rect.Max.X >= i.padding {
-
 		rect.Min.X -= i.padding
 		rect.Min.Y -= i.padding
 		rect.Max.X += i.padding
@@ -137,14 +87,13 @@ func (i *Cropper) crop(c *Croppable) (image.Image, bool) {
 		draw.Draw(cropped.(draw.Image), croppedRect, c.Cropper.SubImage(rect), image.Point{rect.Min.X, rect.Min.Y}, draw.Src)
 	} else {
 		if rect.Size().Eq(c.Cropper.Bounds().Size()) {
-			return nil, false
+			return c.Cropper, false
 		}
 
 		cropped = c.Cropper.SubImage(rect)
 	}
 
 	return cropped, true
-
 }
 
 func (i *Cropper) save(c *Croppable, img image.Image) error {
@@ -163,7 +112,7 @@ func (i *Cropper) save(c *Croppable, img image.Image) error {
 	return nil
 }
 
-func (i *Cropper) cropperRect(img image.Image) image.Rectangle {
+func (i *Cropper) Rect(img image.Image) image.Rectangle {
 	rect := img.Bounds()
 
 	wg := &sync.WaitGroup{}
@@ -225,6 +174,14 @@ func (i *Cropper) cropperRect(img image.Image) image.Rectangle {
 
 	wg.Wait()
 
+	if right > rect.Max.X {
+		right = rect.Max.X
+	}
+
+	if bottom > rect.Max.Y {
+		bottom = rect.Max.Y
+	}
+
 	return image.Rectangle{
 		Min: image.Point{
 			X: left,
@@ -239,12 +196,9 @@ func (i *Cropper) cropperRect(img image.Image) image.Rectangle {
 
 type Croppable struct {
 	Dir, Name, Format string
+	Image             image.Image
 	Cropper           CroppableImage
 	Encode            func(w io.Writer, m image.Image) error
-}
-
-func (c *Croppable) Path() string {
-	return fmt.Sprintf("%s/%s.%s", c.Dir, c.Name, c.Format)
 }
 
 type CroppableImage interface {
@@ -285,6 +239,13 @@ func WithOutSuffix(suffix string) CropperOption {
 func WithOutDir(dir string) CropperOption {
 	return func(c *Cropper) error {
 		c.outDir = dir
+		return nil
+	}
+}
+
+func WithSkipUnchanged(skip bool) CropperOption {
+	return func(c *Cropper) error {
+		c.skipUnchanged = skip
 		return nil
 	}
 }

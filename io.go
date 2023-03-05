@@ -42,6 +42,11 @@ var imageCoders = map[string]imageCoder{
 	},
 }
 
+func AsCroppableImage(img image.Image) (CroppableImage, bool) {
+	croppable, ok := img.(CroppableImage)
+	return croppable, ok
+}
+
 func LoadCroppable(path string) (*Croppable, error) {
 	file, err := os.Open(path)
 	if err != nil {
@@ -62,7 +67,7 @@ func LoadCroppable(path string) (*Croppable, error) {
 		return nil, fmt.Errorf("%s: %w", err.Error(), ErrImageLoadFailed)
 	}
 
-	simg, ok := img.(CroppableImage)
+	croppableImg, ok := AsCroppableImage(img)
 	if !ok {
 		return nil, ErrImageUncroppable
 	}
@@ -71,7 +76,7 @@ func LoadCroppable(path string) (*Croppable, error) {
 		Dir:     dir,
 		Name:    name,
 		Format:  ext,
-		Cropper: simg,
+		Cropper: croppableImg,
 		Encode:  coder.encode,
 	}, nil
 }
