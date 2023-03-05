@@ -30,7 +30,7 @@ func NewCropper(options ...CropperOption) (*Cropper, error) {
 	return c, nil
 }
 
-func (i *Cropper) Crop(croppables []*Croppable) error {
+func (i *Cropper) CropAndSave(croppables []*Croppable) error {
 	if i.outDir != "" {
 		if err := os.MkdirAll(i.outDir, os.ModePerm); err != nil {
 			return err
@@ -38,16 +38,43 @@ func (i *Cropper) Crop(croppables []*Croppable) error {
 	}
 
 	wg := &sync.WaitGroup{}
-
 	wg.Add(len(croppables))
 
 	for _, croppable := range croppables {
-		go i.crop(croppable, wg)
+		go func(c *Croppable) {
+			defer wg.Done()
+			cropped, ok := i.crop(c)
+			if !ok {
+				return
+			}
+
+			err := i.save(c, cropped)
+			if err != nil {
+				fmt.Println(err)
+			}
+		}(croppable)
 	}
 
 	wg.Wait()
 
 	return nil
+}
+
+func (i *Cropper) Crop(croppables []*Croppable) ([]image.Image, error) {
+	if i.outDir != "" {
+		if err := os.MkdirAll(i.outDir, os.ModePerm); err != nil {
+			return []image.Image{}, err
+		}
+	}
+
+	crops := []image.Image{}
+
+	for _, croppable := range croppables {
+		cropped, _ := i.crop(croppable)
+		crops = append(crops, cropped)
+	}
+
+	return crops, nil
 }
 
 type CroppableIterator interface {
@@ -74,7 +101,9 @@ func (i *Cropper) CropIter(iter CroppableIterator) error {
 		}
 
 		wg.Add(1)
-		go i.crop(croppable, wg)
+		go func() {
+			i.crop(croppable)
+		}()
 	}
 
 	wg.Wait()
@@ -82,9 +111,7 @@ func (i *Cropper) CropIter(iter CroppableIterator) error {
 	return nil
 }
 
-func (i *Cropper) crop(c *Croppable, wg *sync.WaitGroup) {
-	defer wg.Done()
-
+func (i *Cropper) crop(c *Croppable) (image.Image, bool) {
 	rect := i.cropperRect(c.Cropper)
 
 	var cropped image.Image
@@ -110,12 +137,17 @@ func (i *Cropper) crop(c *Croppable, wg *sync.WaitGroup) {
 		draw.Draw(cropped.(draw.Image), croppedRect, c.Cropper.SubImage(rect), image.Point{rect.Min.X, rect.Min.Y}, draw.Src)
 	} else {
 		if rect.Size().Eq(c.Cropper.Bounds().Size()) {
-			return
+			return nil, false
 		}
 
 		cropped = c.Cropper.SubImage(rect)
 	}
 
+	return cropped, true
+
+}
+
+func (i *Cropper) save(c *Croppable, img image.Image) error {
 	dir := c.Dir
 	if i.outDir != "" {
 		dir = i.outDir
@@ -124,9 +156,11 @@ func (i *Cropper) crop(c *Croppable, wg *sync.WaitGroup) {
 	name := i.outPrefix + c.Name + i.outSuffix + "." + c.Format
 	outPath := path.Join(dir, name)
 
-	if err := saveImage(outPath, cropped, c.Encode); err != nil {
-		fmt.Printf("error saving %s: %s\n", outPath, err.Error())
+	if err := saveImage(outPath, img, c.Encode); err != nil {
+		return fmt.Errorf("error saving %s: %w", outPath, err)
 	}
+
+	return nil
 }
 
 func (i *Cropper) cropperRect(img image.Image) image.Rectangle {
@@ -141,8 +175,8 @@ func (i *Cropper) cropperRect(img image.Image) image.Rectangle {
 	go func() {
 		defer wg.Done()
 
-		for x := rect.Min.X; x < rect.Max.X; x++ {
-			for y := rect.Min.Y; y < rect.Max.Y; y++ {
+		for y := rect.Min.Y; y < rect.Max.Y; y++ {
+			for x := rect.Min.X; x < rect.Max.X; x++ {
 				pixel := img.At(x, y)
 
 				_, _, _, alpha := pixel.RGBA()
@@ -156,7 +190,7 @@ func (i *Cropper) cropperRect(img image.Image) image.Rectangle {
 						top = y
 					}
 
-					continue
+					break
 				}
 			}
 		}
@@ -168,8 +202,8 @@ func (i *Cropper) cropperRect(img image.Image) image.Rectangle {
 	go func() {
 		defer wg.Done()
 
-		for x := rect.Max.X; x > 0; x-- {
-			for y := rect.Max.Y; y > 0; y-- {
+		for y := rect.Max.Y; y > 0; y-- {
+			for x := rect.Max.X; x > 0; x-- {
 				pixel := img.At(x, y)
 
 				_, _, _, alpha := pixel.RGBA()
@@ -183,7 +217,7 @@ func (i *Cropper) cropperRect(img image.Image) image.Rectangle {
 						bottom = y + 1
 					}
 
-					continue
+					break
 				}
 			}
 		}
@@ -205,7 +239,7 @@ func (i *Cropper) cropperRect(img image.Image) image.Rectangle {
 
 type Croppable struct {
 	Dir, Name, Format string
-	Cropper           croppableImg
+	Cropper           CroppableImage
 	Encode            func(w io.Writer, m image.Image) error
 }
 
@@ -213,7 +247,7 @@ func (c *Croppable) Path() string {
 	return fmt.Sprintf("%s/%s.%s", c.Dir, c.Name, c.Format)
 }
 
-type croppableImg interface {
+type CroppableImage interface {
 	image.Image
 	SubImage(r image.Rectangle) image.Image
 }

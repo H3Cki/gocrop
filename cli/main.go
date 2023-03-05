@@ -110,7 +110,7 @@ func main() {
 						croppables = append(croppables, croppable)
 					}
 
-					return cropper.Crop(croppables)
+					return cropper.CropAndSave(croppables)
 				},
 				Flags: imageFlags,
 			},

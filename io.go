@@ -62,7 +62,7 @@ func LoadCroppable(path string) (*Croppable, error) {
 		return nil, fmt.Errorf("%s: %w", err.Error(), ErrImageLoadFailed)
 	}
 
-	simg, ok := img.(croppableImg)
+	simg, ok := img.(CroppableImage)
 	if !ok {
 		return nil, ErrImageUncroppable
 	}
