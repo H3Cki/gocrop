@@ -3,11 +3,11 @@ package main
 import (
 	"errors"
 	"fmt"
-	"gocrop"
 	"log"
 	"os"
 	"sync"
 
+	"github.com/H3Cki/gocrop"
 	"github.com/urfave/cli/v2"
 )
 
@@ -57,6 +57,11 @@ var imageFlags = []cli.Flag{
 			return nil
 		},
 	},
+	&cli.BoolFlag{
+		Name:  "enumerate",
+		Usage: "Enumerates all images by including n at the end of cropped file name, n gets incremented by 1 each time an image is saved",
+		Value: false,
+	},
 }
 
 var directoryFlags = []cli.Flag{
@@ -78,6 +83,8 @@ var directoryFlags = []cli.Flag{
 
 func main() {
 	app := &cli.App{
+		Name:  "gocrop",
+		Usage: "",
 		Commands: []*cli.Command{
 			{
 				Name:    "image",
@@ -88,37 +95,30 @@ func main() {
 						return errors.New("no images specified")
 					}
 
-					cropper, err := gocrop.NewCropper(
-						gocrop.WithThreshold(uint32(cCtx.Int64("threshold"))),
-						gocrop.WithPadding(cCtx.Int("padding")),
-						gocrop.WithOutDir(cCtx.String("out_dir")),
-						gocrop.WithOutPrefix(cCtx.String("prefix")),
-						gocrop.WithOutSuffix(cCtx.String("suffix")),
-					)
+					cropper, err := cropperFromCtx(cCtx)
 					if err != nil {
 						return err
 					}
 
-					iter := gocrop.NewCroppableLoadIterator(cCtx.Args().Slice())
+					paths := cCtx.Args().Slice()
 
 					wg := &sync.WaitGroup{}
+					wg.Add(len(paths))
 
-					for iter.Reset(); iter.Valid(); iter.Next() {
-						croppable, err := iter.Load()
-						if err != nil {
-							fmt.Println("error loading image: ", err.Error())
-							continue
-						}
+					for _, path := range paths {
+						go func(p string) {
+							croppable, err := gocrop.LoadCroppable(p)
+							if err != nil {
+								fmt.Println("error loading image: ", err.Error())
+								return
+							}
 
-						wg.Add(1)
-
-						go func() {
 							defer wg.Done()
 
 							if err := cropper.CropAndSave(croppable); err != nil {
 								fmt.Println("error loading cropsaving image: ", err.Error())
 							}
-						}()
+						}(path)
 					}
 
 					wg.Wait()
@@ -136,18 +136,7 @@ func main() {
 						return errors.New("no directories specified")
 					}
 
-					cropper, err := gocrop.NewCropper(
-						gocrop.WithThreshold(uint32(cCtx.Int64("threshold"))),
-						gocrop.WithPadding(cCtx.Int("padding")),
-						gocrop.WithOutDir(cCtx.String("out_dir")),
-						gocrop.WithOutPrefix(cCtx.String("prefix")),
-						gocrop.WithOutSuffix(cCtx.String("suffix")),
-					)
-					if err != nil {
-						return err
-					}
-
-					opts := []gocrop.DirectoryLoaderOption{
+					opts := []gocrop.CroppableFinderOptions{
 						gocrop.WithRecursive(cCtx.Bool("recursive")),
 					}
 
@@ -155,34 +144,38 @@ func main() {
 						opts = append(opts, gocrop.WithRegex(cCtx.String("regex")))
 					}
 
-					loader, err := gocrop.NewDirectoryLoader(opts...)
+					loader, err := gocrop.NewCroppableFinder(opts...)
 					if err != nil {
 						return err
 					}
 
-					iter, err := loader.LoadCroppablesIter(cCtx.Args().Slice())
+					cropper, err := cropperFromCtx(cCtx)
+					if err != nil {
+						return err
+					}
+
+					paths, err := loader.Find(cCtx.Args().Slice())
 					if err != nil {
 						return err
 					}
 
 					wg := &sync.WaitGroup{}
+					wg.Add(len(paths))
 
-					for iter.Reset(); iter.Valid(); iter.Next() {
-						croppable, err := iter.Load()
-						if err != nil {
-							fmt.Println("error loading image: ", err.Error())
-							continue
-						}
-
-						wg.Add(1)
-
-						go func() {
+					for _, path := range paths {
+						go func(p string) {
 							defer wg.Done()
 
-							if err := cropper.CropAndSave(croppable); err != nil {
-								fmt.Println("error loading cropsaving image: ", err.Error())
+							croppable, err := gocrop.LoadCroppable(p)
+							if err != nil {
+								fmt.Println("error loading image: ", err.Error())
+								return
 							}
-						}()
+
+							if err := cropper.CropAndSave(croppable); err != nil {
+								fmt.Println(err)
+							}
+						}(path)
 					}
 
 					wg.Wait()
@@ -197,4 +190,14 @@ func main() {
 	if err := app.Run(os.Args); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func cropperFromCtx(ctx *cli.Context) (*gocrop.Cropper, error) {
+	return gocrop.NewCropper(
+		gocrop.WithThreshold(uint32(ctx.Int64("threshold"))),
+		gocrop.WithPadding(ctx.Int("padding")),
+		gocrop.WithOutDir(ctx.String("out_dir")),
+		gocrop.WithOutPrefix(ctx.String("prefix")),
+		gocrop.WithOutSuffix(ctx.String("suffix")),
+	)
 }

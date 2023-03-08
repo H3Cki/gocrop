@@ -10,6 +10,7 @@ import (
 	"sync"
 )
 
+// Cropper crops and saves images.
 type Cropper struct {
 	threshold     uint32
 	outPrefix     string
@@ -17,8 +18,13 @@ type Cropper struct {
 	outDir        string
 	skipUnchanged bool
 	padding       int
+	enumerate     bool
+	num           int
+	numMu         sync.Mutex
 }
 
+// NewCropper creates an instance of *Cropped with provided options,
+// returns error if any option fails.
 func NewCropper(options ...CropperOption) (*Cropper, error) {
 	c := &Cropper{}
 
@@ -31,18 +37,84 @@ func NewCropper(options ...CropperOption) (*Cropper, error) {
 	return c, nil
 }
 
-// Crop takes a *Croppable and crops it. If cropped result differs from *Croppable source image
-// cropped image is returned as non-nil image.Image with a true bool flag. If cropped result
-// is the same as *Croppable source image function returns (nil, false)
-func (i *Cropper) Crop(croppable *Croppable) (image.Image, bool) {
-	cropped, ok := i.crop(croppable)
+// Crop takes a *Croppable and returns a cropped version of it and a bool flag indicating if cropping was done.
+// If cropping would make no changes to given *Croppable, the provided *Croppable is returned back with false flag.
+func (i *Cropper) Crop(croppable *Croppable) (*Croppable, bool) {
+	rect := i.Rect(croppable.Image)
 
-	return cropped, ok
+	if i.padding == 0 {
+		if rect.Size().Eq(croppable.Image.Bounds().Size()) {
+			return croppable, false
+		}
+
+		return croppable.With(croppable.Image.SubImage(rect).(CroppableImage)), true
+	}
+
+	// if rect cuts deep enough it's possible to extend it and crop the image with padded rect
+	if rect.Min.X >= i.padding &&
+		rect.Min.Y >= i.padding &&
+		croppable.Image.Bounds().Dx()-rect.Max.X >= i.padding &&
+		croppable.Image.Bounds().Dy()-rect.Max.X >= i.padding {
+		rect.Min.X -= i.padding
+		rect.Min.Y -= i.padding
+		rect.Max.X += i.padding
+		rect.Max.Y += i.padding
+
+		return croppable.With(croppable.Image.SubImage(rect).(CroppableImage)), true
+	} 
+
+	// if rect is too small create new empty image with proper size and draw the cropped image onto it
+	bg := image.NewRGBA(image.Rect(0, 0, rect.Dx()+(2*i.padding), rect.Dy()+(2*i.padding)))
+	croppedRect := image.Rect(i.padding, i.padding, i.padding+rect.Dx(), i.padding+rect.Dy())
+
+	draw.Draw(bg, croppedRect, croppable.Image.SubImage(rect), image.Point{rect.Min.X, rect.Min.Y}, draw.Src)
+
+	return croppable.With(bg), true
 }
 
-// CropAndSave takes a *Croppable, calls *Cropper.Crop(*Croppable) and attempts to save the cropped result.
-// If cropped result is the same as *Croppable source image and WithSkipUnchanged option was set to true,
-// image will not be saved.
+// Save saves the croppable, creates a directory if it doesn't exist.
+func (i *Cropper) Save(c *Croppable) error {
+	if i.outDir != "" {
+		if err := os.MkdirAll(i.outDir, os.ModePerm); err != nil {
+			return err
+		}
+	}
+
+	return i.save(c)
+}
+
+func (i *Cropper) save(c *Croppable) error {
+	dir := c.Dir
+	if i.outDir != "" {
+		dir = i.outDir
+	}
+
+	num := ""
+	if i.enumerate {
+		num = fmt.Sprintf("_%d", i.enum())
+	}
+
+	name := i.outPrefix + c.Name + num + i.outSuffix + "." + c.Format
+	outPath := path.Join(dir, name)
+
+	if err := saveImage(outPath, c.Image, c.Encode); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (i *Cropper) enum() int {
+	i.numMu.Lock()
+	defer i.numMu.Unlock()
+	n := i.num
+	i.num += 1
+
+	return n
+}
+
+// CropAndSave crops an image and saves it, output directory will be created if it does not exist.
+// Error will be returned if the image was not saved successfully.
 func (i *Cropper) CropAndSave(croppable *Croppable) error {
 	if i.outDir != "" {
 		if err := os.MkdirAll(i.outDir, os.ModePerm); err != nil {
@@ -50,93 +122,44 @@ func (i *Cropper) CropAndSave(croppable *Croppable) error {
 		}
 	}
 
-	cropped, ok := i.crop(croppable)
+	cropped, ok := i.Crop(croppable)
 	if !ok && i.skipUnchanged {
 		return nil
 	}
 
-	if err := i.save(croppable, cropped); err != nil {
-		return err
+	if err := i.save(cropped); err != nil {
+		return fmt.Errorf("error saving image: %w", err)
 	}
 
 	return nil
 }
 
-func (i *Cropper) crop(c *Croppable) (image.Image, bool) {
-	rect := i.Rect(c.Cropper)
-
-	var cropped image.Image
-
-	// if rect is small enough it's possible to extend it and crop the image with padded rect
-	if i.padding != 0 &&
-		rect.Min.X >= i.padding &&
-		rect.Min.Y >= i.padding &&
-		c.Cropper.Bounds().Dx()-rect.Max.X >= i.padding &&
-		c.Cropper.Bounds().Dy()-rect.Max.X >= i.padding {
-		rect.Min.X -= i.padding
-		rect.Min.Y -= i.padding
-		rect.Max.X += i.padding
-		rect.Max.Y += i.padding
-
-		cropped = c.Cropper.SubImage(rect)
-	} else if i.padding != 0 {
-		// if rect is too small create new empty image with proper size and draw the cropped image onto it
-		cropped = image.NewRGBA(image.Rect(0, 0, rect.Dx()+(2*i.padding), rect.Dy()+(2*i.padding)))
-		croppedRect := image.Rect(i.padding, i.padding, i.padding+rect.Dx(), i.padding+rect.Dy())
-
-		draw.Draw(cropped.(draw.Image), croppedRect, c.Cropper.SubImage(rect), image.Point{rect.Min.X, rect.Min.Y}, draw.Src)
-	} else {
-		if rect.Size().Eq(c.Cropper.Bounds().Size()) {
-			return c.Cropper, false
-		}
-
-		cropped = c.Cropper.SubImage(rect)
-	}
-
-	return cropped, true
-}
-
-func (i *Cropper) save(c *Croppable, img image.Image) error {
-	dir := c.Dir
-	if i.outDir != "" {
-		dir = i.outDir
-	}
-
-	name := i.outPrefix + c.Name + i.outSuffix + "." + c.Format
-	outPath := path.Join(dir, name)
-
-	if err := saveImage(outPath, img, c.Encode); err != nil {
-		return fmt.Errorf("error saving %s: %w", outPath, err)
-	}
-
-	return nil
-}
-
+// Rect returns the cropping rectangle of the image, does not include padding.
 func (i *Cropper) Rect(img image.Image) image.Rectangle {
 	rect := img.Bounds()
+
+	min := image.Point{-1, -1}
+	max := image.Point{-1, -1}
 
 	wg := &sync.WaitGroup{}
 	wg.Add(2)
 
-	top, left := rect.Max.Y, rect.Max.X
-
-	// Seek min
 	go func() {
 		defer wg.Done()
 
-		for y := rect.Min.Y; y < rect.Max.Y; y++ {
-			for x := rect.Min.X; x < rect.Max.X; x++ {
+		for y := 0; y < rect.Dy(); y++ {
+			for x := 0; x < rect.Dx(); x++ {
 				pixel := img.At(x, y)
 
 				_, _, _, alpha := pixel.RGBA()
 
 				if alpha > i.threshold {
-					if x < left {
-						left = x
+					if min.X == -1 || x < min.X {
+						min.X = x
 					}
 
-					if y < top {
-						top = y
+					if min.Y == -1 || y < min.Y {
+						min.Y = y
 					}
 
 					break
@@ -145,25 +168,21 @@ func (i *Cropper) Rect(img image.Image) image.Rectangle {
 		}
 	}()
 
-	bottom, right := 0, 0
-
-	// Seek max
 	go func() {
 		defer wg.Done()
-
-		for y := rect.Max.Y; y > 0; y-- {
-			for x := rect.Max.X; x > 0; x-- {
+		for y := rect.Dy() - 1; y >= 0; y-- {
+			for x := rect.Dx() - 1; x >= 0; x-- {
 				pixel := img.At(x, y)
 
 				_, _, _, alpha := pixel.RGBA()
 
 				if alpha > i.threshold {
-					if x > right {
-						right = x + 1
+					if x > max.X {
+						max.X = x + 1
 					}
 
-					if y > bottom {
-						bottom = y + 1
+					if y > max.Y {
+						max.Y = y + 1
 					}
 
 					break
@@ -172,35 +191,74 @@ func (i *Cropper) Rect(img image.Image) image.Rectangle {
 		}
 	}()
 
-	wg.Wait()
-
-	if right > rect.Max.X {
-		right = rect.Max.X
+	if min.Eq(image.Point{-1, -1}) {
+		min = image.Point{}
 	}
 
-	if bottom > rect.Max.Y {
-		bottom = rect.Max.Y
+	if max.Eq(image.Point{-1, -1}) {
+		max = image.Point{rect.Dx(), rect.Dy()}
 	}
 
 	return image.Rectangle{
-		Min: image.Point{
-			X: left,
-			Y: top,
-		},
-		Max: image.Point{
-			X: right,
-			Y: bottom,
-		},
+		Min: min,
+		Max: max,
 	}
 }
 
 type Croppable struct {
 	Dir, Name, Format string
-	Image             image.Image
-	Cropper           CroppableImage
+	Image             CroppableImage
 	Encode            func(w io.Writer, m image.Image) error
 }
 
+// Load Croppable attempts to open and decode an image from given path and returns it as a *Croppable.
+// Error is returned if file fails to open, image format is unsupported, image decoding fails or image is not croppable.
+func LoadCroppable(path string) (*Croppable, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+
+	defer file.Close()
+
+	dir, name, ext := dirFileExt(path)
+
+	coder, ok := imageCoders[ext]
+	if !ok {
+		return nil, ErrUnsupportedFormat
+	}
+
+	img, err := coder.decode(file)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", err.Error(), ErrImageLoadFailed)
+	}
+
+	croppableImg, ok := img.(CroppableImage)
+	if !ok {
+		return nil, ErrImageUncroppable
+	}
+
+	return &Croppable{
+		Dir:    dir,
+		Name:   name,
+		Format: ext,
+		Image:  croppableImg,
+		Encode: coder.encode,
+	}, nil
+}
+
+// With returns a copy of current croppable with Image set to provided image.
+func (c *Croppable) With(ci CroppableImage) *Croppable {
+	return &Croppable{
+		Dir:    c.Dir,
+		Name:   c.Name,
+		Format: c.Format,
+		Image:  ci,
+		Encode: c.Encode,
+	}
+}
+
+// Croppable image is an extension of image.Image interface to ensure the image is croppable.
 type CroppableImage interface {
 	image.Image
 	SubImage(r image.Rectangle) image.Image
@@ -208,6 +266,8 @@ type CroppableImage interface {
 
 type CropperOption func(*Cropper) error
 
+// WithThreshold sets the alpha channel threshold for cropping.
+// Only pixels that satisfy the condition pixelAlpha > threshold will be used in the process of finding a cropping rectangle.
 func WithThreshold(threshold uint32) CropperOption {
 	return func(c *Cropper) error {
 		c.threshold = threshold
@@ -215,6 +275,8 @@ func WithThreshold(threshold uint32) CropperOption {
 	}
 }
 
+// WithPadding sets the number of pixels to add in each direction around the cropped image.
+// If the cropped output is the size 25x25px, with 5px of padding it will be 35x35px with the cropped element centered.
 func WithPadding(padding int) CropperOption {
 	return func(c *Cropper) error {
 		c.padding = padding
@@ -222,6 +284,8 @@ func WithPadding(padding int) CropperOption {
 	}
 }
 
+// WithOutPrefix adds a prefix to an image name.
+// Given prefix "cropped_" and image file name "image1.png", the output image will be named "cropped_image1.png".
 func WithOutPrefix(prefix string) CropperOption {
 	return func(c *Cropper) error {
 		c.outPrefix = prefix
@@ -229,6 +293,8 @@ func WithOutPrefix(prefix string) CropperOption {
 	}
 }
 
+// WithOutSuffix adds a suffix to an image name.
+// Given suffix "_cropped" and image file name "image1.png", the output image will be named "image1_cropped.png".
 func WithOutSuffix(suffix string) CropperOption {
 	return func(c *Cropper) error {
 		c.outSuffix = suffix
@@ -236,6 +302,7 @@ func WithOutSuffix(suffix string) CropperOption {
 	}
 }
 
+// WithOutDir sets the output directory for cropped images.
 func WithOutDir(dir string) CropperOption {
 	return func(c *Cropper) error {
 		c.outDir = dir
@@ -243,9 +310,20 @@ func WithOutDir(dir string) CropperOption {
 	}
 }
 
+// WithSkipUnchanged if set to true output image won't be saved if cropping made no changes to original image.
 func WithSkipUnchanged(skip bool) CropperOption {
 	return func(c *Cropper) error {
 		c.skipUnchanged = skip
+		return nil
+	}
+}
+
+// WithEnumerate enables enumeration of output images.
+// "_n" is appended to it's name (before the suffix), n is an integer incremented by 1 each time an image is saved.
+// Given n of 5, image file name of "image1.png", the output image will be named "image1_5.png".
+func WithEnumerate(enumerate bool) CropperOption {
+	return func(c *Cropper) error {
+		c.enumerate = enumerate
 		return nil
 	}
 }

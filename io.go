@@ -2,7 +2,6 @@ package gocrop
 
 import (
 	"errors"
-	"fmt"
 	"image"
 	"image/gif"
 	"image/png"
@@ -40,45 +39,6 @@ var imageCoders = map[string]imageCoder{
 			return tiff.Encode(w, m, nil)
 		},
 	},
-}
-
-func AsCroppableImage(img image.Image) (CroppableImage, bool) {
-	croppable, ok := img.(CroppableImage)
-	return croppable, ok
-}
-
-func LoadCroppable(path string) (*Croppable, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-
-	defer file.Close()
-
-	dir, name, ext := dirFileExt(path)
-
-	coder, ok := imageCoders[ext]
-	if !ok {
-		return nil, ErrUnsupportedFormat
-	}
-
-	img, err := coder.decode(file)
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", err.Error(), ErrImageLoadFailed)
-	}
-
-	croppableImg, ok := AsCroppableImage(img)
-	if !ok {
-		return nil, ErrImageUncroppable
-	}
-
-	return &Croppable{
-		Dir:     dir,
-		Name:    name,
-		Format:  ext,
-		Cropper: croppableImg,
-		Encode:  coder.encode,
-	}, nil
 }
 
 func saveImage(fp string, img image.Image, encode func(w io.Writer, m image.Image) error) error {

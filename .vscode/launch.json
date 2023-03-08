@@ -9,9 +9,9 @@
             "type": "go",
             "request": "launch",
             "mode": "auto",
-            "program": "${workspaceFolder}/cli",
+            "program": "${workspaceFolder}/cmd",
             "console": "integratedTerminal",
-            "args": ["i", "--suffix", "_crop","--padding", "5", "../testdata/t.png"]
+            "args": ["i", "--suffix", "_c" , "../testdata/rect.png"]
         }
     ]
 }

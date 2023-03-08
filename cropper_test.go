@@ -1,17 +1,37 @@
 package gocrop_test
 
 import (
-	"gocrop"
 	"image"
 	"path"
+	"sync"
 	"testing"
 
+	"github.com/H3Cki/gocrop"
 	"github.com/stretchr/testify/assert"
 )
 
-// TestCropper_Rect loads all images from testdata/described
-// parses their file names and compares their cropping rectangles with parsed points
-// files in testdata/described should be named <anything>-<minX>-<minY>-<maxX>-<maxY>.png
+func TestLoadCroppable(t *testing.T) {
+	tests := []struct {
+		fn    string
+		exErr error
+	}{
+		{"2squares.png", nil},
+		{"blank.png", nil},
+		{"circle.png", nil},
+		{"line.gif", nil},
+		{"white.jpg", gocrop.ErrUnsupportedFormat},
+		{"rect.png", nil},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.fn, func(t *testing.T) {
+			croppable, err := gocrop.LoadCroppable(path.Join("testdata", tt.fn))
+			assert.ErrorIs(t, tt.exErr, err)
+			assert.Equal(t, croppable != nil, tt.exErr == nil)
+		})
+	}
+}
+
 func TestCropper_Rect(t *testing.T) {
 	basicCropper, _ := gocrop.NewCropper()
 
@@ -58,7 +78,7 @@ func TestCropper_Rect(t *testing.T) {
 			assert.NoError(t, err)
 			assert.NotNil(t, croppable)
 
-			croppingRect := tt.cropper.Rect(croppable.Cropper)
+			croppingRect := tt.cropper.Rect(croppable.Image)
 			assert.True(t, tt.exRect.Eq(croppingRect))
 		})
 	}
@@ -121,14 +141,42 @@ func TestCropper_Crop(t *testing.T) {
 			cropped, ok := tt.cropper.Crop(croppable)
 			assert.Equal(t, tt.ok, ok)
 
+			if !ok {
+				return
+			}
+
 			expectedCrop, err := gocrop.LoadCroppable(path.Join("testdata/described/cropped", tt.fn))
 			assert.NoError(t, err)
 
-			assert.True(t, imagesEqual(expectedCrop.Cropper, cropped))
+			assert.True(t, imagesEqual(expectedCrop.Image, cropped.Image))
 		})
 	}
 }
 
 func imagesEqual(img1, img2 image.Image) bool {
 	return img1.Bounds().Size().Eq(img2.Bounds().Size())
+}
+
+func BenchmarkCropper_Crop(b *testing.B) {
+	cropper, _ := gocrop.NewCropper(gocrop.WithOutDir("testoutput"))
+	cpbl, err := gocrop.LoadCroppable("testdata/bigblank.png")
+	assert.NoError(b, err)
+
+	n := 10
+
+	b.Run("x", func(b *testing.B) {
+		wg := &sync.WaitGroup{}
+
+		for i := 0; i < n; i++ {
+			wg.Add(1)
+
+			go func(ii int) {
+				defer wg.Done()
+				cropper.Crop(cpbl)
+			}(i)
+		}
+
+		wg.Wait()
+	})
+
 }

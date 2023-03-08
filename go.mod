@@ -1,4 +1,4 @@
-module gocrop
+module github.com/H3Cki/gocrop
 
 go 1.19
 
