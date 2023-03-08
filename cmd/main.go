@@ -107,7 +107,7 @@ func main() {
 
 					for _, path := range paths {
 						go func(p string) {
-							croppable, err := gocrop.LoadCroppable(p)
+							croppable, err := gocrop.Load(p)
 							if err != nil {
 								fmt.Println("error loading image: ", err.Error())
 								return
@@ -136,7 +136,7 @@ func main() {
 						return errors.New("no directories specified")
 					}
 
-					opts := []gocrop.CroppableFinderOptions{
+					opts := []gocrop.FinderOptions{
 						gocrop.WithRecursive(cCtx.Bool("recursive")),
 					}
 
@@ -144,7 +144,7 @@ func main() {
 						opts = append(opts, gocrop.WithRegex(cCtx.String("regex")))
 					}
 
-					loader, err := gocrop.NewCroppableFinder(opts...)
+					loader, err := gocrop.NewFinder(opts...)
 					if err != nil {
 						return err
 					}
@@ -154,28 +154,27 @@ func main() {
 						return err
 					}
 
-					paths, err := loader.Find(cCtx.Args().Slice())
+					crops, err := loader.Find(cCtx.Args().Slice())
 					if err != nil {
 						return err
 					}
 
 					wg := &sync.WaitGroup{}
-					wg.Add(len(paths))
+					wg.Add(len(crops))
 
-					for _, path := range paths {
-						go func(p string) {
+					for _, croppable := range crops {
+						go func(c *gocrop.Croppable) {
 							defer wg.Done()
 
-							croppable, err := gocrop.LoadCroppable(p)
-							if err != nil {
-								fmt.Println("error loading image: ", err.Error())
+							if err := c.Load(); err != nil {
+								fmt.Println(err)
 								return
 							}
 
-							if err := cropper.CropAndSave(croppable); err != nil {
+							if err := cropper.CropAndSave(c); err != nil {
 								fmt.Println(err)
 							}
-						}(path)
+						}(croppable)
 					}
 
 					wg.Wait()

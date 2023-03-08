@@ -25,6 +25,13 @@ type Cropper struct {
 
 // NewCropper creates an instance of *Cropped with provided options,
 // returns error if any option fails.
+//
+// Default Cropper with no options:
+//
+// - has alpha threshold of 0 and no padding
+//
+// - saves images under the same name in the same directory as the source image (file will be overwritten).
+// If cropping made no changes it still saves the result.
 func NewCropper(options ...CropperOption) (*Cropper, error) {
 	c := &Cropper{}
 
@@ -61,7 +68,7 @@ func (i *Cropper) Crop(croppable *Croppable) (*Croppable, bool) {
 		rect.Max.Y += i.padding
 
 		return croppable.With(croppable.Image.SubImage(rect).(CroppableImage)), true
-	} 
+	}
 
 	// if rect is too small create new empty image with proper size and draw the cropped image onto it
 	bg := image.NewRGBA(image.Rect(0, 0, rect.Dx()+(2*i.padding), rect.Dy()+(2*i.padding)))
@@ -84,7 +91,8 @@ func (i *Cropper) Save(c *Croppable) error {
 }
 
 func (i *Cropper) save(c *Croppable) error {
-	dir := c.Dir
+	dir, name, ext := dirFileExt(c.Path)
+
 	if i.outDir != "" {
 		dir = i.outDir
 	}
@@ -94,7 +102,7 @@ func (i *Cropper) save(c *Croppable) error {
 		num = fmt.Sprintf("_%d", i.enum())
 	}
 
-	name := i.outPrefix + c.Name + num + i.outSuffix + "." + c.Format
+	name = i.outPrefix + name + num + i.outSuffix + "." + ext
 	outPath := path.Join(dir, name)
 
 	if err := saveImage(outPath, c.Image, c.Encode); err != nil {
@@ -191,6 +199,8 @@ func (i *Cropper) Rect(img image.Image) image.Rectangle {
 		}
 	}()
 
+	wg.Wait()
+
 	if min.Eq(image.Point{-1, -1}) {
 		min = image.Point{}
 	}
@@ -205,55 +215,69 @@ func (i *Cropper) Rect(img image.Image) image.Rectangle {
 	}
 }
 
+// Croppable holds the directory of the image, it's name and format in separate string fields (for easier manipulation of the output destination),
+// the core image itself and a proper encoder function for encoding the image.
 type Croppable struct {
-	Dir, Name, Format string
-	Image             CroppableImage
-	Encode            func(w io.Writer, m image.Image) error
+	Path   string
+	Image  CroppableImage
+	Decode func(r io.Reader) (image.Image, error)
+	Encode func(w io.Writer, m image.Image) error
 }
 
-// Load Croppable attempts to open and decode an image from given path and returns it as a *Croppable.
-// Error is returned if file fails to open, image format is unsupported, image decoding fails or image is not croppable.
-func LoadCroppable(path string) (*Croppable, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-
-	defer file.Close()
-
-	dir, name, ext := dirFileExt(path)
+// Load validates if given image format is supported, if so
+// creates a *Croppable and calls it's Load() method.
+func Load(path string) (*Croppable, error) {
+	_, _, ext := dirFileExt(path)
 
 	coder, ok := imageCoders[ext]
 	if !ok {
 		return nil, ErrUnsupportedFormat
 	}
 
-	img, err := coder.decode(file)
+	c := &Croppable{
+		Path:   path,
+		Decode: coder.decode,
+		Encode: coder.encode,
+	}
+
+	if err := c.Load(); err != nil {
+		return nil, err
+	}
+
+	return c, nil
+}
+
+// Load loads the image of the croppable using it's decoder
+// returns an error if image was not successfully decoded or image is not croppable.
+func (c *Croppable) Load() error {
+	file, err := os.Open(c.Path)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", err.Error(), ErrImageLoadFailed)
+		return err
+	}
+
+	defer file.Close()
+
+	img, err := c.Decode(file)
+	if err != nil {
+		return fmt.Errorf("%s: %w", err.Error(), ErrImageLoadFailed)
 	}
 
 	croppableImg, ok := img.(CroppableImage)
 	if !ok {
-		return nil, ErrImageUncroppable
+		return ErrImageUncroppable
 	}
 
-	return &Croppable{
-		Dir:    dir,
-		Name:   name,
-		Format: ext,
-		Image:  croppableImg,
-		Encode: coder.encode,
-	}, nil
+	c.Image = croppableImg
+
+	return nil
 }
 
 // With returns a copy of current croppable with Image set to provided image.
 func (c *Croppable) With(ci CroppableImage) *Croppable {
 	return &Croppable{
-		Dir:    c.Dir,
-		Name:   c.Name,
-		Format: c.Format,
+		Path:   c.Path,
 		Image:  ci,
+		Decode: c.Decode,
 		Encode: c.Encode,
 	}
 }

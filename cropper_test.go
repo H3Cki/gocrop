@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestLoadCroppable(t *testing.T) {
+func TestLoad(t *testing.T) {
 	tests := []struct {
 		fn    string
 		exErr error
@@ -25,7 +25,7 @@ func TestLoadCroppable(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.fn, func(t *testing.T) {
-			croppable, err := gocrop.LoadCroppable(path.Join("testdata", tt.fn))
+			croppable, err := gocrop.Load(path.Join("testdata", tt.fn))
 			assert.ErrorIs(t, tt.exErr, err)
 			assert.Equal(t, croppable != nil, tt.exErr == nil)
 		})
@@ -74,7 +74,7 @@ func TestCropper_Rect(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.fn, func(t *testing.T) {
-			croppable, err := gocrop.LoadCroppable(path.Join("testdata/described", tt.fn))
+			croppable, err := gocrop.Load(path.Join("testdata/described", tt.fn))
 			assert.NoError(t, err)
 			assert.NotNil(t, croppable)
 
@@ -134,7 +134,7 @@ func TestCropper_Crop(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.fn, func(t *testing.T) {
-			croppable, err := gocrop.LoadCroppable(path.Join("testdata/described", tt.fn))
+			croppable, err := gocrop.Load(path.Join("testdata/described", tt.fn))
 			assert.NoError(t, err)
 			assert.NotNil(t, croppable)
 
@@ -145,7 +145,7 @@ func TestCropper_Crop(t *testing.T) {
 				return
 			}
 
-			expectedCrop, err := gocrop.LoadCroppable(path.Join("testdata/described/cropped", tt.fn))
+			expectedCrop, err := gocrop.Load(path.Join("testdata/described/cropped", tt.fn))
 			assert.NoError(t, err)
 
 			assert.True(t, imagesEqual(expectedCrop.Image, cropped.Image))
@@ -159,7 +159,7 @@ func imagesEqual(img1, img2 image.Image) bool {
 
 func BenchmarkCropper_Crop(b *testing.B) {
 	cropper, _ := gocrop.NewCropper(gocrop.WithOutDir("testoutput"))
-	cpbl, err := gocrop.LoadCroppable("testdata/bigblank.png")
+	cpbl, err := gocrop.Load("testdata/bigblank.png")
 	assert.NoError(b, err)
 
 	n := 10
