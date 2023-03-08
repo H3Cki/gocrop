@@ -1,0 +1,41 @@
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+  goconst:
+    min-len: 2
+    min-occurrences: 3
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - experimental
+      - opinionated
+      - performance
+      - style
+    disabled-checks:
+      - appendAssign
+      - rangeValCopy
+      - hugeParam
+  govet:
+    enable:-all: true
+    disable:
+      - fieldalignment
+      - shadow
+
+linters:
+  disable-all: true
+  enable:
+  - unused
+  - gosimple
+  - errcheck
+  - wsl
+  - goconst
+  - gocritic
+  - gosec
+  - govet
+  - staticcheck
+  - ineffassign
+  - typecheck
+  - unconvert
+
+run:
+  issues-exit-code: 1
