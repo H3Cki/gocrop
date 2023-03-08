@@ -2,18 +2,67 @@
 
 gocrop provides a CLI and an API for cropping transparent images.
 
-# Examples
+# Installation
 
-Crop specific images using CLI and output them with `_cropped` suffix:
+```
+go get github.com/H3Cki/gocrop
+```
+
+# CLI Examples
+
+## 1. Crop specific images and output them with `_cropped` suffix:
+
+Directory tree before:
+```   
+├─ img1.png
+├─ img2.png
+├─ img3.png
+
+```
+
+Directory tree after:
+```       
+├─ img1.png
+├─ img1_cropped.png
+├─ img2.png
+├─ img2_cropped.png
+├─ img3.png
+
+```
+
 ```cli
 gocrop image --suffix _cropped img1.png img2.png
 ```
 
-Crop all images which file name matches a regex, in specific directories and all their subdirectories, output all images into `images/cropped` directory:
+## 2. Crop all images which file name matches a regex, in specific directories and all their subdirectories, output results into `images/cropped`:
+
+Directory tree before:
+```
+dir1/
+├─ img1.png
+├─ img2.gif
+dir2/
+├─ img3.gif
+
+```
+
+Directory tree after:
+```
+dir1/
+├─ img1.png
+├─ img2.gif
+dir2/
+├─ img3.gif  
+images/
+├─ cropped/
+│  ├─ img2.gif
+│  ├─ img3.gif
+
+```
+
 ```cli
 gocrop directory --out_dir images/cropped --regex ^.*gif.*$ --recursive dir1 dir2
 ```
-
 
 # API Examples
 
@@ -172,6 +221,40 @@ import (
 )
 
 func main() {
-    
+	// Create a finder with recursive option to traverse all subdirectories
+	finder, err := gocrop.NewFinder(gocrop.WithRecursive(true))
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	directories := []string{"."}
+
+	// Find all images in supported formats and wrap them in Croppable
+	croppables, err := finder.Find(directories)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	// Create a cropper with OutSuffix option that will append "_cropped" to the end of cropped images when saving them
+	cropper, err := gocrop.NewCropper(gocrop.WithOutSuffix("_cropped"))
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	// Iterate over found croppables
+	for _, croppable := range croppables {
+		// Load the image (loads from croppable.Path and decodes it using croppable.Decode)
+		if err := croppable.Load(); err != nil {
+			continue
+		}
+
+		// Crop and save it
+		if err := cropper.CropAndSave(croppable); err != nil {
+			fmt.Printf("error cropping %s: %s\n", croppable.Path, err.Error())
+		}
+	}
 }
 ```
