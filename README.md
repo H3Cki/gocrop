@@ -8,9 +8,36 @@ gocrop provides a CLI and an API for cropping transparent images.
 go get github.com/H3Cki/gocrop
 ```
 
+# Build CLI
+Build .exe file and output it as `gocrop.exe`:
+```
+go build -o gocrop.exe .\cmd\
+```
+
+# How it works
+All transparent pixels (or at least those with alpha value higher than the provided threshold) are discarded in all directions, left, top, right, bottom. If padding option was used the cropped image will be extended by the provided padding amount, equally in all directions. Examples (with hacky border to visualize the image size better, I suggest opening the image anyways):
+
+Original image:
+
+<kbd>
+<img src="https://hecki.codes/gocrop/circle.png">
+</kbd>
+
+Cropped image:
+
+<kbd>
+<img src="https://hecki.codes/gocrop/circle_cropped.png">
+</kbd>
+
+Cropped and padded image:
+
+<kbd>
+<img src="https://hecki.codes/gocrop/circle_cropped_padded.png">
+</kbd>
+
 # CLI Examples
 
-## 1. Crop specific images and output them with `_cropped` suffix:
+### 1. Crop specific images and output them with `_cropped` suffix:
 
 Directory tree before:
 ```   
@@ -34,7 +61,7 @@ Directory tree after:
 gocrop image --suffix _cropped img1.png img2.png
 ```
 
-## 2. Crop all images which file name matches a regex, in specific directories and all their subdirectories, output results into `images/cropped`:
+### 2. Crop all images which file name matches a regex, in specific directories and all their subdirectories, output results into `images/cropped`:
 
 Directory tree before:
 ```
@@ -66,7 +93,7 @@ gocrop directory --out_dir images/cropped --regex ^.*gif.*$ --recursive dir1 dir
 
 # API Examples
 
-## 1. Cropping single image
+### 1. Cropping single image
 
 Directory tree before:
 ```
@@ -124,7 +151,7 @@ func main() {
 ```
 
 
-## 2. Cropping single image with 10-pixel padding and saving it in another directory
+### 2. Cropping single image with 10-pixel padding and saving it in another directory
 
 Directory tree before:
 ```
@@ -182,7 +209,7 @@ func main() {
 ```
 
 
-## 3. Cropping all images in all subdirectories and saving them with _cropped suffix in their original directory
+### 3. Cropping all images in all subdirectories and saving them with _cropped suffix in their original directory
 
 Directory tree before:
 ```
