@@ -5,7 +5,7 @@ gocrop provides a CLI and an API for cropping transparent images.
 [![GoDoc](https://godoc.org/github.com/H3Cki/gocrop?status.svg)](https://godoc.org/github.com/H3Cki/gocrop)
 [![Go Report Card](https://goreportcard.com/badge/github.com/H3Cki/gocrop)](https://goreportcard.com/report/github.com/H3Cki/gocrop)
 [![codecov](https://codecov.io/gh/H3Cki/gocrop/branch/master/graph/badge.svg)](https://codecov.io/gh/H3Cki/gocrop)
-[![build](https://github.com/H3Cki/gocrop/actions/workflows/build.yaml/badge.svg)](https://github.com/H3Cki/gocrop/actions/workflows/build.yaml)
+[![build](https://github.com/H3Cki/gocrop/actions/workflows/build.yaml/badge.svg?branch=master)](https://github.com/H3Cki/gocrop/actions/workflows/build.yaml)
 
 # Installation
 In order to use the API:
