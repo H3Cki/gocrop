@@ -53,8 +53,6 @@ func saveImage(fp string, img image.Image, encode func(w io.Writer, m image.Imag
 }
 
 func dirFileExt(fp string) (dir, name, ext string) {
-	fp = filepath.ToSlash(fp)
-
 	dir = filepath.Dir(fp)
 	ext = filepath.Ext(fp)
 	name = strings.TrimSuffix(filepath.Base(fp), ext)
