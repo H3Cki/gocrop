@@ -1,24 +1,40 @@
 package gocrop
 
 import (
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
+type pathTest struct {
+	fp   string
+	dir  string
+	name string
+	ext  string
+}
+
 func TestDirNameExt(t *testing.T) {
-	tests := []struct {
-		fp   string
-		dir  string
-		name string
-		ext  string
-	}{
-		{"test.png", ".", "test", "png"},
-		{"test.png.jpg", ".", "test.png", "jpg"},
-		{"test", ".", "test", ""},
-		{"foo/bar/test", "foo\\bar", "test", ""},
-		{"./foo/bar/test", "foo\\bar", "test", ""},
-		{"C:\\foo\\test", "C:\\foo", "test", ""},
+	var tests []pathTest
+
+	if runtime.GOOS == "windows" {
+		tests = []pathTest{
+			{"test.png", ".", "test", ".png"},
+			{"test.png.jpg", ".", "test.png", ".jpg"},
+			{"test", ".", "test", ""},
+			{"foo\\bar\\test", "foo\\bar", "test", ""},
+			{".\\foo\\bar\\test", "foo\\bar", "test", ""},
+			{"C:\\foo\\test", "C:\\foo", "test", ""},
+		}
+	} else {
+		tests = []pathTest{
+			{"test.png", ".", "test", ".png"},
+			{"test.png.jpg", ".", "test.png", ".jpg"},
+			{"test", ".", "test", ""},
+			{"foo/bar/test", "foo/bar", "test", ""},
+			{"./foo/bar/test", "foo/bar", "test", ""},
+			{"C:/foo/test", "C:/foo", "test", ""},
+		}
 	}
 
 	for _, tt := range tests {
@@ -37,8 +53,8 @@ func TestFileExt(t *testing.T) {
 		name string
 		ext  string
 	}{
-		{"test.png", "test", "png"},
-		{"test.png.jpg", "test.png", "jpg"},
+		{"test.png", "test", ".png"},
+		{"test.png.jpg", "test.png", ".jpg"},
 		{"test", "test", ""},
 	}
 
