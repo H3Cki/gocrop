@@ -9,11 +9,14 @@ jobs:
       uses: actions/setup-go@v3
       with:
         go-version: "1.20"
-    - run: go version
+    - name: Lint
+      uses: golangci/golangci-lint-action@v3.4.0
+      with:
+        config: golangci.yml
     - name: Tidy mod
       run: go mod tidy
     - name: Build
-      run: go build -v .
+      run: go build -v -o build_test .
     - name: Test
       run: go test -race -coverprofile=coverage.out -covermode=atomic -v ./...
     - name: Upload coverage reports to Codecov

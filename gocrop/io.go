@@ -23,17 +23,17 @@ type imageCoder struct {
 }
 
 var imageCoders = map[string]imageCoder{
-	"png": {
+	".png": {
 		decode: png.Decode,
 		encode: png.Encode,
 	},
-	"gif": {
+	".gif": {
 		decode: gif.Decode,
 		encode: func(w io.Writer, m image.Image) error {
 			return gif.Encode(w, m, nil)
 		},
 	},
-	"tiff": {
+	".tiff": {
 		decode: tiff.Decode,
 		encode: func(w io.Writer, m image.Image) error {
 			return tiff.Encode(w, m, nil)
@@ -53,17 +53,18 @@ func saveImage(fp string, img image.Image, encode func(w io.Writer, m image.Imag
 }
 
 func dirFileExt(fp string) (dir, name, ext string) {
+	fp = filepath.ToSlash(fp)
+
 	dir = filepath.Dir(fp)
-	name, ext = fileExt(filepath.Base(fp))
+	ext = filepath.Ext(fp)
+	name = strings.TrimSuffix(filepath.Base(fp), ext)
 
 	return
 }
 
-func fileExt(fileName string) (name, extension string) {
-	split := strings.Split(fileName, ".")
-	if len(split) < 2 {
-		return fileName, ""
-	}
+func fileExt(fileName string) (name, ext string) {
+	ext = filepath.Ext(fileName)
+	name = strings.TrimSuffix(filepath.Base(fileName), ext)
 
-	return strings.Join(split[0:len(split)-1], "."), split[len(split)-1]
+	return
 }
