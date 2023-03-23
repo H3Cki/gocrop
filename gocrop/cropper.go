@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"path/filepath"
 	"sync"
 )
 
@@ -215,8 +216,7 @@ func (i *Cropper) Rect(img image.Image) image.Rectangle {
 	}
 }
 
-// Croppable holds the directory of the image, it's name and format in separate string fields (for easier manipulation of the output destination),
-// the core image itself and a proper encoder function for encoding the image.
+// Croppable holds the path of the image, the image itself and a proper encoder function for encoding the image.
 type Croppable struct {
 	Path   string
 	Image  CroppableImage
@@ -227,7 +227,7 @@ type Croppable struct {
 // Load validates if given image format is supported, if so
 // creates a *Croppable and calls it's Load() method.
 func Load(path string) (*Croppable, error) {
-	_, _, ext := dirFileExt(path)
+	ext := filepath.Ext(path)
 
 	coder, ok := imageCoders[ext]
 	if !ok {
