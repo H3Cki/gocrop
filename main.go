@@ -7,7 +7,7 @@ import (
 	"os"
 	"sync"
 
-	"github.com/H3Cki/gocrop/gocrop"
+	"github.com/H3Cki/gocrop/gocropper"
 	"github.com/urfave/cli/v2"
 )
 
@@ -107,7 +107,7 @@ func main() {
 
 					for _, path := range paths {
 						go func(p string) {
-							croppable, err := gocrop.Load(p)
+							croppable, err := gocropper.Load(p)
 							if err != nil {
 								fmt.Println("error loading image: ", err.Error())
 								return
@@ -136,15 +136,15 @@ func main() {
 						return errors.New("no directories specified")
 					}
 
-					opts := []gocrop.FinderOptions{
-						gocrop.WithRecursive(cCtx.Bool("recursive")),
+					opts := []gocropper.FinderOptions{
+						gocropper.WithRecursive(cCtx.Bool("recursive")),
 					}
 
 					if cCtx.IsSet("regex") {
-						opts = append(opts, gocrop.WithRegex(cCtx.String("regex")))
+						opts = append(opts, gocropper.WithRegex(cCtx.String("regex")))
 					}
 
-					loader, err := gocrop.NewFinder(opts...)
+					loader, err := gocropper.NewFinder(opts...)
 					if err != nil {
 						return err
 					}
@@ -163,7 +163,7 @@ func main() {
 					wg.Add(len(crops))
 
 					for _, croppable := range crops {
-						go func(c *gocrop.Croppable) {
+						go func(c *gocropper.Croppable) {
 							defer wg.Done()
 
 							if err := c.Load(); err != nil {
@@ -191,12 +191,12 @@ func main() {
 	}
 }
 
-func cropperFromCtx(ctx *cli.Context) (*gocrop.Cropper, error) {
-	return gocrop.NewCropper(
-		gocrop.WithThreshold(uint32(ctx.Int64("threshold"))),
-		gocrop.WithPadding(ctx.Int("padding")),
-		gocrop.WithOutDir(ctx.String("out_dir")),
-		gocrop.WithOutPrefix(ctx.String("prefix")),
-		gocrop.WithOutSuffix(ctx.String("suffix")),
+func cropperFromCtx(ctx *cli.Context) (*gocropper.Cropper, error) {
+	return gocropper.NewCropper(
+		gocropper.WithThreshold(uint32(ctx.Int64("threshold"))),
+		gocropper.WithPadding(ctx.Int("padding")),
+		gocropper.WithOutDir(ctx.String("out_dir")),
+		gocropper.WithOutPrefix(ctx.String("prefix")),
+		gocropper.WithOutSuffix(ctx.String("suffix")),
 	)
 }

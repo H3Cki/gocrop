@@ -1,4 +1,4 @@
-package gocrop_test
+package gocropper_test
 
 import (
 	"image"
@@ -6,7 +6,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/H3Cki/gocrop/gocrop"
+	"github.com/H3Cki/gocrop/gocropper"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -19,13 +19,13 @@ func TestLoad(t *testing.T) {
 		{"blank.png", nil},
 		{"circle.png", nil},
 		{"line.gif", nil},
-		{"white.jpg", gocrop.ErrUnsupportedFormat},
+		{"white.jpg", gocropper.ErrUnsupportedFormat},
 		{"rect.png", nil},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.fn, func(t *testing.T) {
-			croppable, err := gocrop.Load(path.Join("testdata", tt.fn))
+			croppable, err := gocropper.Load(path.Join("testdata", tt.fn))
 			assert.ErrorIs(t, tt.exErr, err)
 			assert.Equal(t, croppable != nil, tt.exErr == nil)
 		})
@@ -33,10 +33,10 @@ func TestLoad(t *testing.T) {
 }
 
 func TestCropper_Rect(t *testing.T) {
-	basicCropper, _ := gocrop.NewCropper()
+	basicCropper, _ := gocropper.NewCropper()
 
 	tests := []struct {
-		cropper *gocrop.Cropper
+		cropper *gocropper.Cropper
 		fn      string
 		exRect  image.Rectangle
 	}{
@@ -74,7 +74,7 @@ func TestCropper_Rect(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.fn, func(t *testing.T) {
-			croppable, err := gocrop.Load(path.Join("testdata/described", tt.fn))
+			croppable, err := gocropper.Load(path.Join("testdata/described", tt.fn))
 			assert.NoError(t, err)
 			assert.NotNil(t, croppable)
 
@@ -86,10 +86,10 @@ func TestCropper_Rect(t *testing.T) {
 
 // TODO test only checks img size
 func TestCropper_Crop(t *testing.T) {
-	basicCropper, _ := gocrop.NewCropper()
+	basicCropper, _ := gocropper.NewCropper()
 
 	tests := []struct {
-		cropper *gocrop.Cropper
+		cropper *gocropper.Cropper
 		fn      string
 		exFn    string
 		ok      bool
@@ -134,7 +134,7 @@ func TestCropper_Crop(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.fn, func(t *testing.T) {
-			croppable, err := gocrop.Load(path.Join("testdata/described", tt.fn))
+			croppable, err := gocropper.Load(path.Join("testdata/described", tt.fn))
 			assert.NoError(t, err)
 			assert.NotNil(t, croppable)
 
@@ -145,7 +145,7 @@ func TestCropper_Crop(t *testing.T) {
 				return
 			}
 
-			expectedCrop, err := gocrop.Load(path.Join("testdata/described/cropped", tt.fn))
+			expectedCrop, err := gocropper.Load(path.Join("testdata/described/cropped", tt.fn))
 			assert.NoError(t, err)
 
 			assert.True(t, imagesEqual(expectedCrop.Image, cropped.Image))
@@ -158,8 +158,8 @@ func imagesEqual(img1, img2 image.Image) bool {
 }
 
 func BenchmarkCropper_Crop(b *testing.B) {
-	cropper, _ := gocrop.NewCropper(gocrop.WithOutDir("testoutput"))
-	cpbl, err := gocrop.Load("testdata/bigblank.png")
+	cropper, _ := gocropper.NewCropper(gocropper.WithOutDir("testoutput"))
+	cpbl, err := gocropper.Load("testdata/bigblank.png")
 	assert.NoError(b, err)
 
 	n := 10

@@ -1,4 +1,4 @@
-package gocrop
+package gocropper
 
 import (
 	"errors"
