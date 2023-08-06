@@ -24,19 +24,19 @@ All transparent pixels (or at least those with alpha value higher than the provi
 Original image:
 
 <kbd>
-<img src="https://hecki.codes/gocrop/circle.png">
+<img src="https://hecki.codes/static/gocrop/circle.png">
 </kbd>
 
 Cropped image:
 
 <kbd>
-<img src="https://hecki.codes/gocrop/circle_cropped.png">
+<img src="https://hecki.codes/static/gocrop/circle_cropped.png">
 </kbd>
 
 Cropped and padded image:
 
 <kbd>
-<img src="https://hecki.codes/gocrop/circle_cropped_padded.png">
+<img src="https://hecki.codes/static/gocrop/circle_cropped_padded.png">
 </kbd>
 
 # CLI Examples
